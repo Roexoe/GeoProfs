@@ -3,78 +3,58 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Badge } from './ui/badge'
 import { Progress } from './ui/progress'
 import { Button } from './ui/button'
-
-interface User {
-  id: string
-  name: string
-  email: string
-  role: string
-  department: string
-  remainingDays: number
-}
+import { useLeaveBalance, useLeaveRequests, useTeamCalendar } from '../hooks/useApi'
+import { User } from '../services/api'
 
 interface EmployeeDashboardProps {
   user: User
 }
 
 export function EmployeeDashboard({ user }: EmployeeDashboardProps) {
-  // Mock data - would come from API
-  const leaveStats = {
-    totalDays: 25,
-    usedDays: 7,
-    remainingDays: user.remainingDays,
-    pendingDays: 3
+  const { data: leaveBalance, loading: balanceLoading, error: balanceError } = useLeaveBalance()
+  const { data: requestsData, loading: requestsLoading, error: requestsError } = useLeaveRequests({ 
+    page: 1, 
+    pageSize: 5 
+  })
+  const { data: calendarData, loading: calendarLoading, error: calendarError } = useTeamCalendar({
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
+    department: user.department
+  })
+
+  // Loading state
+  if (balanceLoading || requestsLoading || calendarLoading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-32 bg-gray-200 rounded"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
   }
 
-  const recentRequests = [
-    {
-      id: '1',
-      startDate: '2024-03-15',
-      endDate: '2024-03-16',
-      days: 2,
-      reason: 'Persoonlijk',
-      status: 'goedgekeurd'
-    },
-    {
-      id: '2',
-      startDate: '2024-04-10',
-      endDate: '2024-04-12',
-      days: 3,
-      reason: 'Vakantie',
-      status: 'in_behandeling'
-    },
-    {
-      id: '3',
-      startDate: '2024-02-20',
-      endDate: '2024-02-23',
-      days: 4,
-      reason: 'Ziekte',
-      status: 'goedgekeurd'
-    }
-  ]
+  const leaveStats = leaveBalance || {
+    totalDays: user.totalDays || 25,
+    usedDays: 0,
+    remainingDays: user.remainingDays,
+    pendingDays: 0
+  }
 
-  const upcomingLeave = [
-    {
-      colleague: 'Jay Schuurman',
-      startDate: '2024-03-20',
-      endDate: '2024-03-22',
-      days: 3
-    },
-    {
-      colleague: 'Claassen',
-      startDate: '2024-03-25',
-      endDate: '2024-03-29',
-      days: 5
-    }
-  ]
+  const recentRequests = requestsData?.requests?.slice(0, 5) || []
+  const upcomingLeave = calendarData?.calendarEvents?.slice(0, 5) || []
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'goedgekeurd':
+      case 'approved':
         return <CheckCircle className="w-4 h-4 text-green-600" />
-      case 'afgewezen':
+      case 'rejected':
         return <XCircle className="w-4 h-4 text-red-600" />
-      case 'in_behandeling':
+      case 'pending':
         return <Clock className="w-4 h-4 text-yellow-600" />
       default:
         return <AlertCircle className="w-4 h-4 text-gray-600" />
@@ -83,11 +63,26 @@ export function EmployeeDashboard({ user }: EmployeeDashboardProps) {
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-      'goedgekeurd': 'default',
-      'afgewezen': 'destructive',
-      'in_behandeling': 'secondary'
+      'approved': 'default',
+      'rejected': 'destructive',
+      'pending': 'secondary'
     }
     return variants[status] || 'outline'
+  }
+
+  const getStatusLabel = (status: string): string => {
+    switch (status) {
+      case 'approved':
+        return 'Goedgekeurd'
+      case 'rejected':
+        return 'Afgewezen'
+      case 'pending':
+        return 'In behandeling'
+      case 'cancelled':
+        return 'Geannuleerd'
+      default:
+        return status
+    }
   }
 
   return (
@@ -178,12 +173,10 @@ export function EmployeeDashboard({ user }: EmployeeDashboardProps) {
                         {request.startDate} - {request.endDate}
                       </span>
                     </div>
-                    <p className="text-sm text-muted-foreground">{request.reason} • {request.days} dagen</p>
+                    <p className="text-sm text-muted-foreground">{request.reason} • {request.workingDays} dagen</p>
                   </div>
                   <Badge variant={getStatusBadge(request.status)}>
-                    {request.status === 'goedgekeurd' && 'Goedgekeurd'}
-                    {request.status === 'afgewezen' && 'Afgewezen'}
-                    {request.status === 'in_behandeling' && 'In behandeling'}
+                    {getStatusLabel(request.status)}
                   </Badge>
                 </div>
               ))}
@@ -205,14 +198,14 @@ export function EmployeeDashboard({ user }: EmployeeDashboardProps) {
               {upcomingLeave.map((leave, index) => (
                 <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                   <div className="flex-1">
-                    <p className="font-medium">{leave.colleague}</p>
+                    <p className="font-medium">{leave.employeeName}</p>
                     <p className="text-sm text-muted-foreground">
                       {leave.startDate} - {leave.endDate} • {leave.days} dagen
                     </p>
                   </div>
                   <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center">
                     <span className="text-xs font-medium">
-                      {leave.colleague.split(' ').map(n => n[0]).join('')}
+                      {leave.employeeName.split(' ').map((n: string) => n[0]).join('')}
                     </span>
                   </div>
                 </div>

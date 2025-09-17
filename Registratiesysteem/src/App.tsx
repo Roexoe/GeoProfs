@@ -10,23 +10,32 @@ import { LeaveRequestForm } from './components/leave-request-form'
 import { ApprovalPanel } from './components/approval-panel'
 import { TeamCalendar } from './components/team-calendar'
 import { Reports } from './components/reports'
-
-// Mock user data - in real app this would come from authentication
-const currentUser = {
-  id: '1',
-  name: 'Pim Melchers',
-  email: 'p.melchers@geoprofs.nl',
-  role: 'manager', // 'employee', 'manager', 'hr'
-  department: 'Landmeetkunde',
-  remainingDays: 18
-}
+import { LoginScreen } from './components/LoginScreen'
+import { useAuth, useNotifications } from './hooks/useApi'
 
 export default function App() {
   const [currentView, setCurrentView] = useState('dashboard')
-  const [notifications] = useState([
-    { id: 1, message: 'Max van Rooijen heeft verlof aangevraagd', type: 'approval' },
-    { id: 2, message: 'Uw verlofaanvraag is goedgekeurd', type: 'info' }
-  ])
+  const { user: currentUser, loading: userLoading, logout } = useAuth()
+  const { data: notificationsData, loading: notificationsLoading } = useNotifications({ unread: true })
+
+  // Show loading state while authenticating
+  if (userLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-lg font-medium">Laden...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show login screen if not authenticated
+  if (!currentUser) {
+    return <LoginScreen />
+  }
+
+  const notifications = notificationsData?.notifications || []
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: FileText },
@@ -37,6 +46,14 @@ export default function App() {
       { id: 'reports', label: 'Rapporten', icon: FileText }
     ] : [])
   ]
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
+  }
 
   const renderCurrentView = () => {
     switch (currentView) {
@@ -100,7 +117,7 @@ export default function App() {
                   <p className="text-xs text-muted-foreground">{currentUser.department}</p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" className="w-full mt-2">
+              <Button variant="outline" size="sm" className="w-full mt-2" onClick={handleLogout}>
                 <LogOut className="w-4 h-4 mr-2" />
                 Uitloggen
               </Button>

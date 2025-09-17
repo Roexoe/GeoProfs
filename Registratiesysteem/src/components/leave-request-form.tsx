@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Calendar, Save, X } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
@@ -10,6 +10,9 @@ import { Badge } from './ui/badge'
 import { Alert, AlertDescription } from './ui/alert'
 import { Calendar as CalendarComponent } from './ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
+import { useLeaveTypes, useCreateLeaveRequest, useConflictingRequests, useWorkingDays } from '../hooks/useApi'
+import { User } from '../services/api'
+
 // Mock date functions for demo purposes
 const format = (date: Date, formatStr: string, options?: any) => {
   return date.toLocaleDateString('nl-NL')
@@ -22,15 +25,6 @@ const addDays = (date: Date, days: number) => {
   const result = new Date(date)
   result.setDate(result.getDate() + days)
   return result
-}
-
-interface User {
-  id: string
-  name: string
-  email: string
-  role: string
-  department: string
-  remainingDays: number
 }
 
 interface LeaveRequestFormProps {
@@ -132,7 +126,7 @@ export function LeaveRequestForm({ user }: LeaveRequestFormProps) {
                           className="w-full justify-start text-left font-normal"
                         >
                           <Calendar className="mr-2 h-4 w-4" />
-                          {startDate ? format(startDate, 'dd MMMM yyyy', { locale: nl }) : 'Selecteer datum'}
+                          {startDate ? format(startDate, 'dd MMMM yyyy') : 'Selecteer datum'}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
@@ -140,7 +134,7 @@ export function LeaveRequestForm({ user }: LeaveRequestFormProps) {
                           mode="single"
                           selected={startDate}
                           onSelect={setStartDate}
-                          disabled={(date) => date < new Date()}
+                          disabled={(date: Date) => date < new Date()}
                           initialFocus
                         />
                       </PopoverContent>
@@ -156,7 +150,7 @@ export function LeaveRequestForm({ user }: LeaveRequestFormProps) {
                           className="w-full justify-start text-left font-normal"
                         >
                           <Calendar className="mr-2 h-4 w-4" />
-                          {endDate ? format(endDate, 'dd MMMM yyyy', { locale: nl }) : 'Selecteer datum'}
+                          {endDate ? format(endDate, 'dd MMMM yyyy') : 'Selecteer datum'}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
@@ -164,7 +158,7 @@ export function LeaveRequestForm({ user }: LeaveRequestFormProps) {
                           mode="single"
                           selected={endDate}
                           onSelect={setEndDate}
-                          disabled={(date) => date < (startDate || new Date())}
+                          disabled={(date: Date) => date < (startDate || new Date())}
                           initialFocus
                         />
                       </PopoverContent>
@@ -266,7 +260,7 @@ export function LeaveRequestForm({ user }: LeaveRequestFormProps) {
                   <span className="text-sm text-muted-foreground">Periode:</span>
                   <span className="text-sm font-medium">
                     {startDate && endDate 
-                      ? `${format(startDate, 'dd MMM', { locale: nl })} - ${format(endDate, 'dd MMM', { locale: nl })}`
+                      ? `${format(startDate, 'dd MMM')} - ${format(endDate, 'dd MMM')}`
                       : 'Niet geselecteerd'
                     }
                   </span>

@@ -4,23 +4,46 @@ import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { Progress } from './ui/progress'
 import { Avatar, AvatarFallback } from './ui/avatar'
-
-interface User {
-  id: string
-  name: string
-  email: string
-  role: string
-  department: string
-  remainingDays: number
-}
+import { useDashboardMetrics, usePendingApprovals, useTeamCalendar } from '../hooks/useApi'
+import { User } from '../services/api'
 
 interface ManagerDashboardProps {
   user: User
 }
 
 export function ManagerDashboard({ user }: ManagerDashboardProps) {
-  // Mock data - would come from API
-  const teamStats = {
+  const { data: dashboardStats, loading: statsLoading } = useDashboardMetrics({ 
+    department: user.department,
+    timeframe: 'month'
+  })
+  const { data: pendingApprovalsData, loading: approvalsLoading } = usePendingApprovals({ 
+    department: user.department,
+    page: 1,
+    pageSize: 5
+  })
+  const { data: calendarData, loading: calendarLoading } = useTeamCalendar({
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
+    department: user.department
+  })
+
+  // Loading state
+  if (statsLoading || approvalsLoading || calendarLoading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-32 bg-gray-200 rounded"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const teamStats = dashboardStats || {
     totalMembers: 12,
     currentlyOnLeave: 2,
     pendingApprovals: 4,
@@ -28,38 +51,7 @@ export function ManagerDashboard({ user }: ManagerDashboardProps) {
     occupancyRate: 83
   }
 
-  const pendingApprovals = [
-    {
-      id: '1',
-      employeeName: 'Max van Rooijen',
-      startDate: '2024-03-25',
-      endDate: '2024-03-29',
-      days: 5,
-      reason: 'Vakantie',
-      submitted: '2024-03-10',
-      priority: 'normal'
-    },
-    {
-      id: '2',
-      employeeName: 'Jay Schuurman',
-      startDate: '2024-03-20',
-      endDate: '2024-03-20',
-      days: 1,
-      reason: 'Persoonlijk',
-      submitted: '2024-03-11',
-      priority: 'urgent'
-    },
-    {
-      id: '3',
-      employeeName: 'Mees van Aalten',
-      startDate: '2024-04-01',
-      endDate: '2024-04-05',
-      days: 5,
-      reason: 'Vakantie',
-      submitted: '2024-03-08',
-      priority: 'normal'
-    }
-  ]
+  const pendingApprovals = pendingApprovalsData?.pendingApprovals?.slice(0, 5) || []
 
   const currentAbsences = [
     {
@@ -196,7 +188,7 @@ export function ManagerDashboard({ user }: ManagerDashboardProps) {
                       <div>
                         <p className="font-medium">{request.employeeName}</p>
                         <p className="text-sm text-muted-foreground">
-                          {request.startDate} - {request.endDate} ({request.days} dagen)
+                          {request.startDate} - {request.endDate} ({request.workingDays} dagen)
                         </p>
                       </div>
                     </div>
@@ -205,7 +197,7 @@ export function ManagerDashboard({ user }: ManagerDashboardProps) {
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground mb-3">
-                    Reden: {request.reason} • Ingediend: {request.submitted}
+                    Reden: {request.reason} • Ingediend: {request.submittedDate}
                   </p>
                   <div className="flex gap-2">
                     <Button size="sm" className="flex-1">

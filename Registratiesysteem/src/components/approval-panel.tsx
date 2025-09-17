@@ -10,115 +10,32 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from './ui/textarea'
 import { Label } from './ui/label'
 import { Alert, AlertDescription } from './ui/alert'
-
-interface User {
-  id: string
-  name: string
-  email: string
-  role: string
-  department: string
-  remainingDays: number
-}
+import { usePendingApprovals, useApprovalActions, useApprovalHistory } from '../hooks/useApi'
+import { ErrorDisplay, LoadingSpinner } from './ErrorHandling'
+import { User as UserType, LeaveRequest } from '../services/api'
 
 interface ApprovalPanelProps {
-  user: User
-}
-
-interface LeaveRequest {
-  id: string
-  employeeId: string
-  employeeName: string
-  employeeEmail: string
-  startDate: string
-  endDate: string
-  workingDays: number
-  leaveType: string
-  reason: string
-  notes?: string
-  status: 'pending' | 'approved' | 'rejected'
-  submittedDate: string
-  priority: 'low' | 'normal' | 'high' | 'urgent'
-  remainingBalance: number
-  conflicts?: string[]
+  user: UserType
 }
 
 export function ApprovalPanel({ user }: ApprovalPanelProps) {
   const [filter, setFilter] = useState('all')
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null)
   const [approvalComment, setApprovalComment] = useState('')
-  const [isProcessing, setIsProcessing] = useState(false)
 
-  // Mock data - would come from API
-  const leaveRequests: LeaveRequest[] = [
-    {
-      id: '1',
-      employeeId: 'emp1',
-      employeeName: 'Max van Rooijen',
-      employeeEmail: 'm.vanrooijen@geoprofs.nl',
-      startDate: '2024-03-25',
-      endDate: '2024-03-29',
-      workingDays: 5,
-      leaveType: 'vacation',
-      reason: 'Familievakantie naar Italië',
-      notes: 'Projecten zijn overgedragen aan Jay',
-      status: 'pending',
-      submittedDate: '2024-03-10',
-      priority: 'normal',
-      remainingBalance: 15,
-      conflicts: []
-    },
-    {
-      id: '2',
-      employeeId: 'emp2',
-      employeeName: 'Jay Schuurman',
-      employeeEmail: 'j.schuurman@geoprofs.nl',
-      startDate: '2024-03-20',
-      endDate: '2024-03-20',
-      workingDays: 1,
-      leaveType: 'personal',
-      reason: 'Medische afspraak',
-      status: 'pending',
-      submittedDate: '2024-03-18',
-      priority: 'urgent',
-      remainingBalance: 8,
-      conflicts: []
-    },
-    {
-      id: '3',
-      employeeId: 'emp3',
-      employeeName: 'Mees van Aalten',
-      employeeEmail: 'm.vanaalten@geoprofs.nl',
-      startDate: '2024-04-01',
-      endDate: '2024-04-05',
-      workingDays: 5,
-      leaveType: 'vacation',
-      reason: 'Lentevakantie',
-      status: 'pending',
-      submittedDate: '2024-03-08',
-      priority: 'normal',
-      remainingBalance: 12,
-      conflicts: ['Max van Rooijen: 25-29 maart (overlapping periode)']
-    },
-    {
-      id: '4',
-      employeeId: 'emp4',
-      employeeName: 'Jochem Bosch',
-      employeeEmail: 'j.bosch@geoprofs.nl',
-      startDate: '2024-02-15',
-      endDate: '2024-02-16',
-      workingDays: 2,
-      leaveType: 'personal',
-      reason: 'Persoonlijke aangelegenheden',
-      status: 'approved',
-      submittedDate: '2024-02-01',
-      priority: 'normal',
-      remainingBalance: 18
-    }
-  ]
+  // API hooks
+  const { data: pendingData, loading: pendingLoading, error: pendingError, refetch: refetchPending } = usePendingApprovals({ 
+    department: user.department 
+  })
+  const { data: historyData, loading: historyLoading, error: historyError } = useApprovalHistory()
+  const { approveRequest, rejectRequest, loading: isProcessing, error: actionError } = useApprovalActions()
+
+  const leaveRequests = pendingData?.pendingApprovals || []
+  const approvalHistory = historyData?.approvalHistory || []
 
   const pendingRequests = leaveRequests.filter(req => req.status === 'pending')
-  const approvedRequests = leaveRequests.filter(req => req.status === 'approved')
-  const rejectedRequests = leaveRequests.filter(req => req.status === 'rejected')
+  const approvedRequests = approvalHistory.filter(req => req.status === 'approved')
+  const rejectedRequests = approvalHistory.filter(req => req.status === 'rejected')
 
   const getLeaveTypeLabel = (type: string) => {
     const types: Record<string, string> = {
@@ -144,20 +61,24 @@ export function ApprovalPanel({ user }: ApprovalPanelProps) {
   }
 
   const handleApproval = async (requestId: string, approved: boolean, comment: string = '') => {
-    setIsProcessing(true)
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    // In real app, this would update the backend
-    console.log(`Request ${requestId} ${approved ? 'approved' : 'rejected'}`, { comment })
-    
-    setSelectedRequest(null)
-    setApprovalComment('')
-    setIsProcessing(false)
-    
-    // Show success message
-    alert(`Aanvraag ${approved ? 'goedgekeurd' : 'afgewezen'}!`)
+    try {
+      if (approved) {
+        await approveRequest(requestId, comment)
+      } else {
+        await rejectRequest(requestId, 'Afgewezen door manager', comment)
+      }
+      
+      setSelectedRequest(null)
+      setApprovalComment('')
+      
+      // Refresh the data
+      refetchPending()
+      
+      alert(`Aanvraag ${approved ? 'goedgekeurd' : 'afgewezen'}!`)
+    } catch (error) {
+      console.error('Error processing approval:', error)
+      alert('Er is een fout opgetreden bij het verwerken van de aanvraag.')
+    }
   }
 
   const filteredRequests = (requests: LeaveRequest[]) => {
@@ -173,6 +94,16 @@ export function ApprovalPanel({ user }: ApprovalPanelProps) {
           Bekijk en verwerk verlofaanvragen van je teamleden
         </p>
       </div>
+
+      {/* Error Display */}
+      <ErrorDisplay error={pendingError || historyError || actionError} retry={refetchPending} className="mb-4" />
+
+      {/* Loading State */}
+      {(pendingLoading || historyLoading) && (
+        <div className="flex justify-center py-8">
+          <LoadingSpinner size="lg" />
+        </div>
+      )}
 
       {/* Filter Controls */}
       <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
@@ -235,8 +166,8 @@ export function ApprovalPanel({ user }: ApprovalPanelProps) {
                           <h3 className="font-semibold text-sm sm:text-base truncate">{request.employeeName}</h3>
                           <p className="text-xs sm:text-sm text-muted-foreground truncate">{request.employeeEmail}</p>
                           <div className="flex flex-wrap items-center gap-1 sm:gap-2 mt-1">
-                            <Badge variant={getPriorityBadge(request.priority).variant} className="text-xs">
-                              {getPriorityBadge(request.priority).label}
+                            <Badge variant={getPriorityBadge(request.priority || 'normal').variant} className="text-xs">
+                              {getPriorityBadge(request.priority || 'normal').label}
                             </Badge>
                             <Badge variant="outline" className="text-xs">{getLeaveTypeLabel(request.leaveType)}</Badge>
                           </div>
